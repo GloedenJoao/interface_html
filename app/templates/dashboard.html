@@ -1,18 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-{% macro column_field(field_name, label, selected, viz_types, col_class="col-md-6", disabled=False) -%}
-  <div class="{{ col_class }}" data-role="viz-field" data-viz="{{ viz_types }}">
-    <label class="form-label" for="{{ field_name }}">{{ label }}</label>
-    <select class="form-select" name="{{ field_name }}" id="{{ field_name }}" {% if disabled %}disabled{% endif %}>
-      <option value="">Selecione...</option>
-      {% for column in view_columns %}
-      <option value="{{ column }}" {% if selected == column %}selected{% endif %}>{{ column }}</option>
-      {% endfor %}
-    </select>
-  </div>
-{%- endmacro %}
-
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
     <h1 class="mb-1">Construção de Dashboards</h1>
@@ -64,20 +52,10 @@
             <label class="form-label" for="viz_type">Tipo</label>
             <select class="form-select" name="viz_type" id="viz_type" {% if not view_columns %}disabled{% endif %}>
               <option value="table" {% if viz_type_value == 'table' %}selected{% endif %}>Tabela</option>
-              <option value="line" {% if viz_type_value == 'line' %}selected{% endif %}>Linha</option>
-              <option value="bar" {% if viz_type_value == 'bar' %}selected{% endif %}>Barra</option>
               <option value="pie" {% if viz_type_value == 'pie' %}selected{% endif %}>Pizza</option>
-              <option value="scatter" {% if viz_type_value == 'scatter' %}selected{% endif %}>Dispersão</option>
             </select>
           </div>
           <div class="row g-3" id="viz-fields">
-            {{ column_field('x_column', 'Coluna X', columns_state['x'], 'line,bar,scatter', disabled=not view_columns) }}
-            {{ column_field('y_column', 'Coluna Y', columns_state['y'], 'line,bar,scatter', disabled=not view_columns) }}
-            {{ column_field('color_column', 'Cor / Agrupamento', columns_state['color'], 'line,bar,scatter', disabled=not view_columns) }}
-            {{ column_field('size_column', 'Tamanho (dispersão)', columns_state['size'], 'scatter', disabled=not view_columns) }}
-            {{ column_field('text_column', 'Texto / Hover', columns_state['text'], 'scatter', disabled=not view_columns) }}
-            {{ column_field('names_column', 'Rótulos (pizza)', columns_state['names'], 'pie', disabled=not view_columns) }}
-            {{ column_field('value_column', 'Valores (pizza)', columns_state['values'], 'pie', disabled=not view_columns) }}
             <div class="col-12" data-role="viz-field" data-viz="table">
               <label class="form-label" for="table_columns">Colunas da tabela</label>
               <select class="form-select" id="table_columns" name="table_columns" multiple {% if not view_columns %}disabled{% endif %}>
@@ -87,11 +65,33 @@
               </select>
               <div class="form-text">Selecione as colunas que deseja exibir na visualização em tabela.</div>
             </div>
+            <div class="col-md-6" data-role="viz-field" data-viz="pie">
+              <label class="form-label" for="names_column">Coluna de rótulos</label>
+              <select class="form-select" name="names_column" id="names_column" {% if not view_columns %}disabled{% endif %}>
+                <option value="">Selecione...</option>
+                {% for column in view_columns %}
+                <option value="{{ column }}" {% if columns_state['names'] == column %}selected{% endif %}>{{ column }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6" data-role="viz-field" data-viz="pie">
+              <label class="form-label" for="value_column">Coluna de valores</label>
+              <select class="form-select" name="value_column" id="value_column" {% if not view_columns %}disabled{% endif %}>
+                <option value="">Selecione...</option>
+                {% for column in view_columns %}
+                <option value="{{ column }}" {% if columns_state['values'] == column %}selected{% endif %}>{{ column }}</option>
+                {% endfor %}
+              </select>
+            </div>
           </div>
           <div class="mb-3 mt-3">
-            <label class="form-label" for="filters">Filtros (um por linha)</label>
-            <textarea class="form-control" name="filters" id="filters" rows="3" placeholder="coluna operador valor&#10;status = 'Scheduled'&#10;passageiros >= 150" {% if not view_columns %}disabled{% endif %}>{{ filters_value }}</textarea>
-            <div class="form-text">Operadores aceitos: =, !=, &gt;, &lt;, &gt;=, &lt;=, contains.</div>
+            <label class="form-label" for="filter_columns">Colunas adicionais para filtros rápidos</label>
+            <select class="form-select" id="filter_columns" name="filter_columns" multiple {% if not view_columns %}disabled{% endif %}>
+              {% for column in view_columns %}
+              <option value="{{ column }}" {% if column in selected_additional_filter_columns %}selected{% endif %}>{{ column }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Opcional: escolha colunas extras que aparecerão na área de filtros rápidos.</div>
           </div>
           <div class="d-flex flex-wrap gap-2">
             <button class="btn btn-outline-secondary" type="submit" name="action" value="preview" {% if not view_columns %}disabled{% endif %}>Pré-visualizar</button>
@@ -137,8 +137,12 @@
             </div>
             <div class="btn-group btn-group-sm">
               <a class="btn btn-outline-primary" href="{{ url_for('edit_dashboard_item', item_id=item.id) }}">Editar</a>
-              <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filters-{{ item.id }}" aria-expanded="false" aria-controls="filters-{{ item.id }}">
-                Filtros rápidos
+              {% set metadata = dashboard_filter_metadata[item.id] %}
+              <button class="btn btn-outline-secondary d-flex align-items-center gap-2" type="button" data-bs-toggle="collapse" data-bs-target="#filters-{{ item.id }}" aria-expanded="false" aria-controls="filters-{{ item.id }}">
+                <span>Filtros rápidos</span>
+                {% if metadata.used %}
+                <span class="badge bg-light text-dark text-wrap">{{ metadata.used | join(', ') }}</span>
+                {% endif %}
               </button>
               <form method="post" action="{{ url_for('delete_dashboard_item', item_id=item.id) }}" class="d-inline" onsubmit="return confirm('Remover visualização {{ item.name }}?');">
                 <button class="btn btn-outline-danger" type="submit">Remover</button>
@@ -183,7 +187,7 @@
                       <label class="form-label">Coluna</label>
                       <select class="form-select" name="filter_column">
                         <option value="">Selecione...</option>
-                        {% for column in dashboard_columns[item.id] %}
+                        {% for column in metadata.allowed %}
                         <option value="{{ column }}" {% if row.column == column %}selected{% endif %}>{{ column }}</option>
                         {% endfor %}
                       </select>
