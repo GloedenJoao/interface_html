@@ -167,7 +167,7 @@
           {% endif %}
           <div class="collapse mt-4" id="filters-{{ item.id }}">
             <div class="border rounded-4 p-3 bg-opacity-25" style="background: rgba(15, 25, 40, 0.75);">
-              <form method="post" action="{{ url_for('dashboard') }}" data-filter-form>
+              <form method="post" action="{{ url_for('dashboard') }}" data-filter-form data-values="{{ metadata.values | tojson | e }}" data-form-id="{{ item.id }}">
                 <input type="hidden" name="action" value="filter_saved">
                 <input type="hidden" name="item_id" value="{{ item.id }}">
                 {% set filter_ns = namespace(rows=[]) %}
@@ -202,8 +202,12 @@
                       </select>
                     </div>
                     <div class="col-md-4">
-                      <label class="form-label">Valor</label>
-                      <input type="text" class="form-control" name="filter_value" value="{{ row.value }}" placeholder="Informe o valor">
+                      <label class="form-label">Valores sugeridos</label>
+                      <div class="d-flex flex-wrap gap-2" data-value-options>
+                        <span class="text-muted small">Selecione uma coluna para ver os valores.</span>
+                      </div>
+                      <input type="hidden" name="filter_value" value="{{ row.value }}" data-filter-value>
+                      <div class="form-text small text-muted">Escolha um ou mais valores para preencher o filtro.</div>
                     </div>
                     <div class="col-md-1 d-flex align-items-end">
                       <button class="btn btn-sm btn-outline-danger w-100" type="button" data-remove-filter>&times;</button>
@@ -254,6 +258,139 @@
       if (!rowsContainer || !addButton) {
         return;
       }
+
+      let valueMap = {};
+      try {
+        valueMap = JSON.parse(form.dataset.values || '{}');
+      } catch (error) {
+        valueMap = {};
+      }
+
+      const controllers = new WeakMap();
+
+      function parseHiddenValues(rawValue) {
+        if (!rawValue) {
+          return [];
+        }
+        return rawValue
+          .split('||')
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+          .map((item) => item.replace(/^['"]+|['"]+$/g, ''));
+      }
+
+      function updateHiddenFromSelection(row) {
+        const data = controllers.get(row);
+        if (!data) {
+          return;
+        }
+        const selected = Array.from(row.querySelectorAll('[data-value-option]:checked')).map((element) => element.value.trim());
+        data.hiddenInput.value = selected.join('||');
+      }
+
+      function renderValueOptions(row, preserveSelection) {
+        const data = controllers.get(row);
+        if (!data) {
+          return;
+        }
+        const column = data.columnSelect.value;
+        const container = data.valuesContainer;
+        const existingSelection = preserveSelection ? parseHiddenValues(data.hiddenInput.value) : [];
+        if (!preserveSelection) {
+          data.hiddenInput.value = '';
+        } else {
+          data.hiddenInput.value = existingSelection.join('||');
+        }
+        container.innerHTML = '';
+        if (!column) {
+          const message = document.createElement('span');
+          message.className = 'text-muted small';
+          message.textContent = 'Selecione uma coluna para ver os valores.';
+          container.appendChild(message);
+          return;
+        }
+        const availableValues = Array.isArray(valueMap[column]) ? valueMap[column] : [];
+        if (!availableValues.length) {
+          const message = document.createElement('span');
+          message.className = 'text-muted small';
+          message.textContent = 'Nenhum valor sugerido disponível para esta coluna.';
+          container.appendChild(message);
+          if (existingSelection.length) {
+            const current = document.createElement('div');
+            current.className = 'mt-2 small text-warning';
+            current.textContent = `Valor atual: ${existingSelection.join(', ')}`;
+            container.appendChild(current);
+          }
+          return;
+        }
+
+        const normalizedOptions = availableValues.map((option) => String(option));
+        const availableSet = new Set(normalizedOptions);
+        const selectedValues = existingSelection.filter((value) => availableSet.has(value));
+        const selectedLookup = new Set(selectedValues);
+        const missingValues = existingSelection.filter((value) => !availableSet.has(value));
+
+        normalizedOptions.forEach((optionValue) => {
+          const label = document.createElement('label');
+          label.className = 'form-check form-check-inline me-2 mb-2';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'form-check-input me-2';
+          checkbox.value = optionValue;
+          checkbox.dataset.valueOption = 'true';
+          checkbox.checked = selectedLookup.has(optionValue);
+          label.appendChild(checkbox);
+          const text = document.createElement('span');
+          text.textContent = optionValue === '' ? '(vazio)' : optionValue;
+          label.appendChild(text);
+          container.appendChild(label);
+        });
+
+        data.hiddenInput.value = [...selectedValues].join('||');
+
+        if (missingValues.length) {
+          const info = document.createElement('div');
+          info.className = 'mt-2 small text-warning';
+          info.textContent = `Valor atual fora da lista sugerida: ${missingValues.join(', ')}`;
+          container.appendChild(info);
+          data.hiddenInput.value = [...selectedValues, ...missingValues].join('||');
+        }
+      }
+
+      function initializeRow(row) {
+        if (controllers.has(row)) {
+          renderValueOptions(row, true);
+          return;
+        }
+        const columnSelect = row.querySelector('select[name="filter_column"]');
+        const operatorSelect = row.querySelector('select[name="filter_operator"]');
+        const hiddenInput = row.querySelector('input[name="filter_value"][data-filter-value]');
+        const valuesContainer = row.querySelector('[data-value-options]');
+        if (!columnSelect || !hiddenInput || !valuesContainer) {
+          return;
+        }
+        controllers.set(row, {
+          columnSelect,
+          operatorSelect,
+          hiddenInput,
+          valuesContainer,
+        });
+
+        columnSelect.addEventListener('change', () => {
+          hiddenInput.value = '';
+          renderValueOptions(row, false);
+        });
+
+        row.addEventListener('change', (event) => {
+          const target = event.target;
+          if (target && target.matches('[data-value-option]')) {
+            updateHiddenFromSelection(row);
+          }
+        });
+
+        renderValueOptions(row, true);
+      }
+
       function createRow() {
         const template = rowsContainer.querySelector('[data-filter-row]');
         const clone = template.cloneNode(true);
@@ -264,8 +401,10 @@
             element.value = '';
           }
         });
+        initializeRow(clone);
         return clone;
       }
+
       function refreshRemoveButtons() {
         const rows = rowsContainer.querySelectorAll('[data-filter-row]');
         rows.forEach((row, index) => {
@@ -275,6 +414,7 @@
           }
         });
       }
+
       rowsContainer.addEventListener('click', (event) => {
         const target = event.target;
         if (target && target.matches('[data-remove-filter]')) {
@@ -285,25 +425,70 @@
           }
         }
       });
+
       addButton.addEventListener('click', () => {
         const newRow = createRow();
         rowsContainer.appendChild(newRow);
         refreshRemoveButtons();
       });
+
       if (clearButton) {
         clearButton.addEventListener('click', () => {
           const rows = Array.from(rowsContainer.querySelectorAll('[data-filter-row]'));
           rows.slice(1).forEach((row) => row.remove());
-          rowsContainer.querySelectorAll('input, select').forEach((element, index) => {
-            if (element.tagName === 'SELECT') {
-              element.selectedIndex = 0;
-            } else {
-              element.value = '';
-            }
+          rowsContainer.querySelectorAll('select').forEach((element) => {
+            element.selectedIndex = 0;
+          });
+          rowsContainer.querySelectorAll('input[data-filter-value]').forEach((element) => {
+            element.value = '';
+          });
+          rowsContainer.querySelectorAll('[data-filter-row]').forEach((row) => {
+            renderValueOptions(row, false);
           });
           refreshRemoveButtons();
         });
       }
+
+      form.addEventListener('submit', () => {
+        rowsContainer.querySelectorAll('[data-filter-row]').forEach((row) => {
+          initializeRow(row);
+          const data = controllers.get(row);
+          if (!data) {
+            return;
+          }
+          const selectedValues = parseHiddenValues(data.hiddenInput.value);
+          if (!selectedValues.length) {
+            return;
+          }
+          data.hiddenInput.value = selectedValues[0];
+          const columnValue = data.columnSelect.value;
+          const operatorValue = data.operatorSelect ? data.operatorSelect.value : '';
+          if (!columnValue || !operatorValue) {
+            return;
+          }
+          for (let index = 1; index < selectedValues.length; index += 1) {
+            const extraColumn = document.createElement('input');
+            extraColumn.type = 'hidden';
+            extraColumn.name = 'filter_column';
+            extraColumn.value = columnValue;
+            form.appendChild(extraColumn);
+
+            const extraOperator = document.createElement('input');
+            extraOperator.type = 'hidden';
+            extraOperator.name = 'filter_operator';
+            extraOperator.value = operatorValue;
+            form.appendChild(extraOperator);
+
+            const extraValue = document.createElement('input');
+            extraValue.type = 'hidden';
+            extraValue.name = 'filter_value';
+            extraValue.value = selectedValues[index];
+            form.appendChild(extraValue);
+          }
+        });
+      });
+
+      rowsContainer.querySelectorAll('[data-filter-row]').forEach((row) => initializeRow(row));
       refreshRemoveButtons();
     });
   })();
