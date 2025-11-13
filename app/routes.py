@@ -180,7 +180,6 @@ def register_routes(app: Flask) -> None:
             "names": None,
             "values": None,
             "table_columns": None,
-            "filter_columns": None,
         }
         if edit_item is not None:
             for key in columns_state:
@@ -217,18 +216,6 @@ def register_routes(app: Flask) -> None:
                 else:
                     columns_state["table_columns"] = _clean(
                         request.form.get("table_columns")
-                    )
-
-                selected_filter_columns = [
-                    value.strip()
-                    for value in request.form.getlist("filter_columns")
-                    if value and value.strip()
-                ]
-                if selected_filter_columns:
-                    columns_state["filter_columns"] = ", ".join(selected_filter_columns)
-                else:
-                    columns_state["filter_columns"] = _clean(
-                        request.form.get("filter_columns")
                     )
 
             item_id = request.form.get("item_id") or None
@@ -314,15 +301,6 @@ def register_routes(app: Flask) -> None:
             if columns_state.get("table_columns")
             else []
         )
-        selected_additional_filter_columns = (
-            [
-                value.strip()
-                for value in (columns_state.get("filter_columns") or "").split(",")
-                if value.strip()
-            ]
-            if columns_state.get("filter_columns")
-            else []
-        )
         dashboard_items = dashboard_store.list()
         dashboard_filter_metadata = {
             item.id: _build_dashboard_filter_metadata(item) for item in dashboard_items
@@ -342,7 +320,6 @@ def register_routes(app: Flask) -> None:
             viz_name_value=viz_name_value,
             columns_state=columns_state,
             selected_table_columns=selected_table_columns,
-            selected_additional_filter_columns=selected_additional_filter_columns,
             dashboard_filter_metadata=dashboard_filter_metadata,
         )
 
@@ -545,12 +522,9 @@ def _build_view_summaries() -> List[Tuple[str, List[Tuple[str, str]]]]:
 def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, List[str]]:
     available_columns = _get_view_columns(item.view_name)
     used_columns = _extract_visual_columns(item.viz_type, item.columns, available_columns)
-    extra_columns = _parse_columns_list(item.columns.get("filter_columns"), available_columns)
-
-    allowed_columns: List[str] = []
-    for column in used_columns + extra_columns:
-        if column in available_columns and column not in allowed_columns:
-            allowed_columns.append(column)
+    allowed_columns = [
+        column for column in used_columns if column in available_columns
+    ]
 
     if not allowed_columns:
         allowed_columns = available_columns
