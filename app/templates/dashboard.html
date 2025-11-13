@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-{% macro column_field(field_name, label, selected, viz_types, col_class="col-md-6", disabled=False) -%}
+{% macro column_field(field_name, label, selected, viz_types, col_class="col-md-6", disabled=False, help_text="") -%}
   <div class="{{ col_class }}" data-role="viz-field" data-viz="{{ viz_types }}">
     <label class="form-label" for="{{ field_name }}">{{ label }}</label>
     <select class="form-select" name="{{ field_name }}" id="{{ field_name }}" {% if disabled %}disabled{% endif %}>
@@ -10,6 +10,9 @@
       <option value="{{ column }}" {% if selected == column %}selected{% endif %}>{{ column }}</option>
       {% endfor %}
     </select>
+    {% if help_text %}
+    <div class="form-text">{{ help_text }}</div>
+    {% endif %}
   </div>
 {%- endmacro %}
 
@@ -73,7 +76,7 @@
           <div class="row g-3" id="viz-fields">
             {{ column_field('x_column', 'Coluna X', columns_state['x'], 'line,bar,scatter', disabled=not view_columns) }}
             {{ column_field('y_column', 'Coluna Y', columns_state['y'], 'line,bar,scatter', disabled=not view_columns) }}
-            {{ column_field('color_column', 'Cor / Agrupamento', columns_state['color'], 'line,bar,scatter', disabled=not view_columns) }}
+            {{ column_field('color_column', 'Cor dos pontos (opcional)', columns_state['color'], 'scatter', disabled=not view_columns, help_text='Defina uma coluna categórica para diferenciar os marcadores por cor.') }}
             {{ column_field('size_column', 'Tamanho (dispersão)', columns_state['size'], 'scatter', disabled=not view_columns) }}
             {{ column_field('text_column', 'Texto / Hover', columns_state['text'], 'scatter', disabled=not view_columns) }}
             {{ column_field('names_column', 'Rótulos (pizza)', columns_state['names'], 'pie', disabled=not view_columns) }}
