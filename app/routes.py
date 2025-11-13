@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from ast import literal_eval
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import plotly.express as px
@@ -542,7 +542,7 @@ def _build_view_summaries() -> List[Tuple[str, List[Tuple[str, str]]]]:
     return summaries
 
 
-def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, Any]:
+def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, List[str]]:
     available_columns = _get_view_columns(item.view_name)
     used_columns = _extract_visual_columns(item.viz_type, item.columns, available_columns)
     extra_columns = _parse_columns_list(item.columns.get("filter_columns"), available_columns)
@@ -555,26 +555,9 @@ def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, Any]:
     if not allowed_columns:
         allowed_columns = available_columns
 
-    column_values: Dict[str, List[str]] = {}
-    stored_view = view_store.get(item.view_name)
-    if stored_view is not None:
-        dataframe = stored_view.dataframe
-        for column in allowed_columns:
-            if column not in dataframe.columns:
-                continue
-            series = dataframe[column]
-            distinct_values = (
-                series.dropna().drop_duplicates().head(50).tolist()
-            )
-            if distinct_values:
-                column_values[column] = [
-                    str(value) for value in distinct_values
-                ]
-
     return {
         "used": used_columns,
         "allowed": allowed_columns,
-        "values": column_values,
     }
 
 
