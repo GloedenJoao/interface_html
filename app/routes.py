@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from ast import literal_eval
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -15,7 +16,7 @@ from flask import (
     url_for,
 )
 
-from .dashboard_store import dashboard_store
+from .dashboard_store import DashboardItem, dashboard_store
 from .database import get_connection, list_tables
 from .views_store import StoredView, view_store
 
@@ -186,34 +187,36 @@ def register_routes(app: Flask) -> None:
 
         viz_type_value = edit_item.viz_type if edit_item is not None else "table"
         viz_name_value = edit_item.name if edit_item is not None else ""
+        existing_filters_text = edit_item.filters_text if edit_item is not None else ""
 
         if request.method == "POST":
             action = request.form.get("action")
-            selected_view_name = request.form.get("view_name") or None
-            viz_type_value = request.form.get("viz_type") or viz_type_value or "table"
-            raw_viz_name = request.form.get("viz_name")
-            if raw_viz_name is not None:
-                viz_name_value = raw_viz_name.strip() or viz_type_value.title()
-            elif not viz_name_value:
-                viz_name_value = viz_type_value.title()
+            if action != "filter_saved":
+                selected_view_name = request.form.get("view_name") or None
+                viz_type_value = request.form.get("viz_type") or viz_type_value or "table"
+                raw_viz_name = request.form.get("viz_name")
+                if raw_viz_name is not None:
+                    viz_name_value = raw_viz_name.strip() or viz_type_value.title()
+                elif not viz_name_value:
+                    viz_name_value = viz_type_value.title()
 
-            columns_state.update(
-                {
-                    "names": _clean(request.form.get("names_column")),
-                    "values": _clean(request.form.get("value_column")),
-                }
-            )
-            table_columns_selected = [
-                value.strip()
-                for value in request.form.getlist("table_columns")
-                if value and value.strip()
-            ]
-            if table_columns_selected:
-                columns_state["table_columns"] = ", ".join(table_columns_selected)
-            else:
-                columns_state["table_columns"] = _clean(
-                    request.form.get("table_columns")
+                columns_state.update(
+                    {
+                        "names": _clean(request.form.get("names_column")),
+                        "values": _clean(request.form.get("value_column")),
+                    }
                 )
+                table_columns_selected = [
+                    value.strip()
+                    for value in request.form.getlist("table_columns")
+                    if value and value.strip()
+                ]
+                if table_columns_selected:
+                    columns_state["table_columns"] = ", ".join(table_columns_selected)
+                else:
+                    columns_state["table_columns"] = _clean(
+                        request.form.get("table_columns")
+                    )
 
             item_id = request.form.get("item_id") or None
 
@@ -225,6 +228,7 @@ def register_routes(app: Flask) -> None:
                         selected_view_name,
                         viz_type_value,
                         columns_state,
+                        existing_filters_text if edit_item else "",
                     )
                     if "error" in result:
                         error = result["error"]
@@ -236,6 +240,7 @@ def register_routes(app: Flask) -> None:
                                 selected_view_name,
                                 viz_type_value,
                                 columns_state.copy(),
+                                existing_filters_text if edit_item else "",
                                 result,
                             )
                             success = f"Visualização '{viz_name_value}' adicionada ao dashboard."
@@ -246,9 +251,45 @@ def register_routes(app: Flask) -> None:
                                 selected_view_name,
                                 viz_type_value,
                                 columns_state.copy(),
+                                existing_filters_text,
                                 result,
                             )
                             success = f"Visualização '{viz_name_value}' atualizada."
+            elif action == "filter_saved":
+                item = dashboard_store.get(item_id) if item_id else None
+                if item is None:
+                    error = "Visualização não encontrada para aplicar filtros."
+                else:
+                    filter_columns = request.form.getlist("filter_column")
+                    filter_operators = request.form.getlist("filter_operator")
+                    filter_values = request.form.getlist("filter_value")
+                    filter_lines = []
+                    for column, operator, value in zip(
+                        filter_columns, filter_operators, filter_values
+                    ):
+                        column = _clean(column)
+                        operator = (operator or "").strip()
+                        value = (value or "").strip()
+                        if column and operator and value:
+                            filter_lines.append(f"{column} {operator} {value}")
+
+                    filters_text = "\n".join(filter_lines)
+                    result = build_visualization(
+                        item.view_name, item.viz_type, item.columns, filters_text
+                    )
+                    if "error" in result:
+                        error = result["error"]
+                    else:
+                        dashboard_store.update(
+                            item.id,
+                            item.name,
+                            item.view_name,
+                            item.viz_type,
+                            item.columns,
+                            filters_text,
+                            result,
+                        )
+                        success = f"Filtros atualizados para '{item.name}'."
 
         view_columns = _get_view_columns(selected_view_name)
         selected_table_columns = (
@@ -261,6 +302,9 @@ def register_routes(app: Flask) -> None:
             else []
         )
         dashboard_items = dashboard_store.list()
+        dashboard_filter_metadata = {
+            item.id: _build_dashboard_filter_metadata(item) for item in dashboard_items
+        }
 
         return render_template(
             "dashboard.html",
@@ -276,6 +320,7 @@ def register_routes(app: Flask) -> None:
             viz_name_value=viz_name_value,
             columns_state=columns_state,
             selected_table_columns=selected_table_columns,
+            dashboard_filter_metadata=dashboard_filter_metadata,
         )
 
     @app.route("/dashboard/<item_id>/delete", methods=["POST"])
@@ -347,12 +392,16 @@ def execute_on_views(sql_query: str) -> pd.DataFrame:
         memory_connection.close()
 
 
-def build_visualization(view_name: str, viz_type: str, columns: Dict[str, Optional[str]]) -> Dict[str, str]:
+def build_visualization(view_name: str, viz_type: str, columns: Dict[str, Optional[str]], filters_text: str) -> Dict[str, str]:
     stored_view = view_store.get(view_name)
     if stored_view is None:
         return {"error": "View selecionada não existe mais."}
 
     dataframe = stored_view.dataframe.copy()
+    try:
+        dataframe = apply_filters(dataframe, filters_text)
+    except ValueError as exc:
+        return {"error": str(exc)}
 
     if viz_type == "table":
         selected_columns = _parse_columns_list(columns.get("table_columns"), dataframe.columns)
@@ -369,7 +418,7 @@ def build_visualization(view_name: str, viz_type: str, columns: Dict[str, Option
         }
 
     if dataframe.empty:
-        return {"error": "Não há dados disponíveis para gerar o gráfico."}
+        return {"error": "Não há dados para gerar o gráfico após aplicar os filtros."}
 
     if viz_type == "pie":
         names, values = columns.get("names"), columns.get("values")
@@ -383,6 +432,57 @@ def build_visualization(view_name: str, viz_type: str, columns: Dict[str, Option
         "type": "chart",
         "graph_json": json.dumps(fig, cls=PlotlyJSONEncoder),
     }
+
+
+def apply_filters(dataframe: pd.DataFrame, filters_text: str) -> pd.DataFrame:
+    if not filters_text:
+        return dataframe
+
+    filtered = dataframe.copy()
+    for line in filters_text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            raise ValueError(
+                "Filtro inválido. Use o formato 'coluna operador valor', um por linha."
+            )
+        column, operator, raw_value = parts[0], parts[1], " ".join(parts[2:])
+        if column not in filtered.columns:
+            raise ValueError(f"Coluna '{column}' não encontrada na view.")
+
+        value = _parse_value(raw_value)
+        series = filtered[column]
+
+        if operator == "=":
+            mask = series == value
+        elif operator == "!=":
+            mask = series != value
+        elif operator == ">":
+            mask = series > value
+        elif operator == "<":
+            mask = series < value
+        elif operator == ">=":
+            mask = series >= value
+        elif operator == "<=":
+            mask = series <= value
+        elif operator.lower() == "contains":
+            mask = series.astype(str).str.contains(str(value), case=False, na=False)
+        else:
+            raise ValueError(
+                "Operador inválido. Utilize =, !=, >, <, >=, <= ou contains."
+            )
+        filtered = filtered.loc[mask]
+    return filtered
+
+
+def _parse_value(raw_value: str):
+    text = raw_value.strip()
+    try:
+        return literal_eval(text)
+    except (ValueError, SyntaxError):
+        return text.strip("\"")
 
 
 def _parse_columns_list(value: Optional[str], available: List[str]) -> List[str]:
@@ -417,4 +517,35 @@ def _build_view_summaries() -> List[Tuple[str, List[Tuple[str, str]]]]:
             columns.append((column, dtype))
         summaries.append((stored.name, columns))
     return summaries
+
+
+def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, List[str]]:
+    available_columns = _get_view_columns(item.view_name)
+    used_columns = _extract_visual_columns(item.viz_type, item.columns, available_columns)
+    allowed_columns = [
+        column for column in used_columns if column in available_columns
+    ]
+
+    if not allowed_columns:
+        allowed_columns = available_columns
+
+    return {
+        "used": used_columns,
+        "allowed": allowed_columns,
+    }
+
+
+def _extract_visual_columns(
+    viz_type: str, columns: Dict[str, Optional[str]], available: List[str]
+) -> List[str]:
+    if viz_type == "table":
+        selected = _parse_columns_list(columns.get("table_columns"), available)
+        return selected if selected else available
+    if viz_type == "pie":
+        result: List[str] = []
+        for value in (columns.get("names"), columns.get("values")):
+            if value and value in available and value not in result:
+                result.append(value)
+        return result
+    return []
 
