@@ -1,10 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Duplicidade{% endblock %}
 {% block content %}
-<h1 class="mb-4">Análise de Duplicidade</h1>
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+  <div>
+    <h1 class="mb-1">Análise de Duplicidade</h1>
+    <p class="text-secondary mb-0">Selecione uma view e identifique rapidamente combinações duplicadas.</p>
+  </div>
+</div>
 <div class="card shadow-sm">
   <div class="card-body">
-    <form method="post" class="row g-3 align-items-end">
+    <form method="post" class="row g-3 align-items-end" id="duplicates-form">
       <div class="col-md-4">
         <label for="view_name" class="form-label">View</label>
         <select name="view_name" id="view_name" class="form-select" required>
@@ -25,7 +30,7 @@
           </div>
           {% endfor %}
           {% else %}
-          <p class="text-muted mb-0">Selecione uma view para visualizar as colunas disponíveis.</p>
+          <p class="text-secondary mb-0">Escolha uma view para visualizar as colunas disponíveis imediatamente.</p>
           {% endif %}
         </div>
       </div>
@@ -55,4 +60,20 @@
     {% endif %}
   </div>
 </div>
+<script>
+  (function () {
+    const viewSelect = document.getElementById('view_name');
+    if (!viewSelect) return;
+
+    viewSelect.addEventListener('change', function () {
+      const next = new URL(window.location.href);
+      if (this.value) {
+        next.searchParams.set('view_name', this.value);
+      } else {
+        next.searchParams.delete('view_name');
+      }
+      window.location.href = next.toString();
+    });
+  })();
+</script>
 {% endblock %}
