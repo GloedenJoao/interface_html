@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import sqlite3
 from ast import literal_eval
-from typing import Dict, List, Optional, Tuple
+from collections import defaultdict
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 import plotly.express as px
@@ -273,10 +275,32 @@ def register_routes(app: Flask) -> None:
                 if item is None:
                     error = "Visualização não encontrada para aplicar filtros."
                 else:
+                    quick_choices_payloads = request.form.getlist("quick_filter_choice")
+                    quick_filters: Dict[str, List[str]] = defaultdict(list)
+                    for payload in quick_choices_payloads:
+                        try:
+                            parsed_choice = json.loads(payload)
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+                        column = _clean(parsed_choice.get("column"))
+                        literal = parsed_choice.get("value")
+                        if column and isinstance(literal, str):
+                            if literal not in quick_filters[column]:
+                                quick_filters[column].append(literal)
+
                     filter_columns = request.form.getlist("filter_column")
                     filter_operators = request.form.getlist("filter_operator")
                     filter_values = request.form.getlist("filter_value")
                     filter_lines = []
+                    for column, literals in quick_filters.items():
+                        if not literals:
+                            continue
+                        if len(literals) == 1:
+                            filter_lines.append(f"{column} = {literals[0]}")
+                        else:
+                            joined = ", ".join(literals)
+                            filter_lines.append(f"{column} in [{joined}]")
+
                     for column, operator, value in zip(
                         filter_columns, filter_operators, filter_values
                     ):
@@ -492,9 +516,15 @@ def apply_filters(dataframe: pd.DataFrame, filters_text: str) -> pd.DataFrame:
             mask = series <= value
         elif operator.lower() == "contains":
             mask = series.astype(str).str.contains(str(value), case=False, na=False)
+        elif operator.lower() == "in":
+            iterable = _ensure_iterable(value)
+            mask = series.isin(iterable)
+        elif operator.lower() == "not in":
+            iterable = _ensure_iterable(value)
+            mask = ~series.isin(iterable)
         else:
             raise ValueError(
-                "Operador inválido. Utilize =, !=, >, <, >=, <= ou contains."
+                "Operador inválido. Utilize =, !=, >, <, >=, <=, contains, in ou not in."
             )
         filtered = filtered.loc[mask]
     return filtered
@@ -542,7 +572,7 @@ def _build_view_summaries() -> List[Tuple[str, List[Tuple[str, str]]]]:
     return summaries
 
 
-def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, List[str]]:
+def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, object]:
     available_columns = _get_view_columns(item.view_name)
     used_columns = _extract_visual_columns(item.viz_type, item.columns, available_columns)
     extra_columns = _parse_columns_list(item.columns.get("filter_columns"), available_columns)
@@ -555,10 +585,194 @@ def _build_dashboard_filter_metadata(item: DashboardItem) -> Dict[str, List[str]
     if not allowed_columns:
         allowed_columns = available_columns
 
+    stored_view = view_store.get(item.view_name)
+    dataframe = stored_view.dataframe if stored_view is not None else None
+    distinct_values_map = (
+        _collect_distinct_values(dataframe, allowed_columns)
+        if dataframe is not None
+        else {}
+    )
+
+    parsed_filters = _parse_filters_text(item.filters_text)
+    quick_selected: Dict[str, set] = defaultdict(set)
+    manual_filters: List[Dict[str, str]] = []
+
+    for column, operator, raw_value in parsed_filters:
+        canonical_literal = _canonical_literal(raw_value)
+        operator_normalized = operator.lower()
+        handled = False
+        if column in distinct_values_map and canonical_literal is not None:
+            allowed_literals = {
+                value_info["literal"]
+                for value_info in distinct_values_map[column]["values"]
+            }
+            if operator == "=" and canonical_literal in allowed_literals:
+                quick_selected[column].add(canonical_literal)
+                handled = True
+            elif operator_normalized == "in":
+                parsed_value = _parse_value(raw_value)
+                if isinstance(parsed_value, (list, tuple, set)):
+                    literals = [
+                        _format_filter_literal(entry)
+                        for entry in parsed_value
+                        if not pd.isna(entry)
+                    ]
+                    if literals and all(lit in allowed_literals for lit in literals):
+                        quick_selected[column].update(literals)
+                        handled = True
+
+        if not handled:
+            manual_filters.append(
+                {
+                    "column": column,
+                    "operator": operator,
+                    "value": raw_value,
+                }
+            )
+
+    quick_choices = {}
+    for column in allowed_columns:
+        column_values = distinct_values_map.get(column)
+        if not column_values:
+            continue
+        quick_choices[column] = {
+            "values": [
+                {
+                    "label": value_info["label"],
+                    "literal": value_info["literal"],
+                    "selected": value_info["literal"] in quick_selected[column],
+                }
+                for value_info in column_values["values"]
+            ],
+            "limited": column_values["limited"],
+        }
+
     return {
         "used": used_columns,
         "allowed": allowed_columns,
+        "choices": quick_choices,
+        "manual_filters": manual_filters,
     }
+
+
+def _collect_distinct_values(
+    dataframe: Optional[pd.DataFrame], columns: Iterable[str], limit: int = 50
+) -> Dict[str, Dict[str, object]]:
+    if dataframe is None:
+        return {}
+
+    result: Dict[str, Dict[str, object]] = {}
+    for column in columns:
+        if column not in dataframe.columns:
+            continue
+        series = dataframe[column].dropna()
+        unique_values = pd.unique(series)
+        normalized_values = []
+        seen_literals = set()
+        for value in unique_values:
+            normalized = _normalize_distinct_value(value)
+            try:
+                if pd.isna(normalized):
+                    continue
+            except TypeError:
+                continue
+            literal = _format_filter_literal(normalized)
+            if literal in seen_literals:
+                continue
+            seen_literals.add(literal)
+            normalized_values.append((normalized, literal))
+
+        normalized_values.sort(key=lambda item: _value_sort_key(item[0]))
+        limited = len(normalized_values) > limit
+        limited_values = normalized_values[:limit]
+        formatted = [
+            {
+                "label": _format_display_value(value),
+                "literal": literal,
+            }
+            for value, literal in limited_values
+        ]
+        if formatted:
+            result[column] = {"values": formatted, "limited": limited}
+    return result
+
+
+def _normalize_distinct_value(value):
+    if isinstance(value, pd.Timestamp):
+        return value.to_pydatetime()
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    return value
+
+
+def _value_sort_key(value):
+    if isinstance(value, bool):
+        return (0, int(value))
+    if isinstance(value, (int, float)):
+        return (1, value)
+    if isinstance(value, dt.datetime):
+        return (2, value.isoformat())
+    if isinstance(value, dt.date):
+        return (3, value.isoformat())
+    if isinstance(value, str):
+        return (4, value.lower())
+    return (5, str(value))
+
+
+def _format_display_value(value) -> str:
+    if isinstance(value, dt.datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    return str(value)
+
+
+def _format_filter_literal(value) -> str:
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, dt.datetime):
+        return json.dumps(value.isoformat())
+    if isinstance(value, dt.date):
+        return json.dumps(value.isoformat())
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _parse_filters_text(filters_text: str) -> List[Tuple[str, str, str]]:
+    parsed: List[Tuple[str, str, str]] = []
+    if not filters_text:
+        return parsed
+    for line in filters_text.splitlines():
+        tokens = line.strip().split(" ", 2)
+        if len(tokens) == 3:
+            parsed.append((tokens[0], tokens[1], tokens[2]))
+    return parsed
+
+
+def _canonical_literal(raw_value: str) -> Optional[str]:
+    if raw_value is None:
+        return None
+    parsed = _parse_value(raw_value)
+    try:
+        if pd.isna(parsed):
+            return None
+    except TypeError:
+        return None
+    return _format_filter_literal(parsed)
+
+
+def _ensure_iterable(value) -> List:
+    if isinstance(value, str):
+        parsed = _parse_value(value)
+    else:
+        parsed = value
+    if isinstance(parsed, (list, tuple, set)):
+        return list(parsed)
+    return [parsed]
 
 
 def _extract_visual_columns(
