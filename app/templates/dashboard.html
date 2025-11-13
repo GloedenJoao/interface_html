@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="mb-4">Construção de Dashboards</h1>
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-header">Configurar visualização</div>
+      <div class="card-body">
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+        <form method="post">
+          <input type="hidden" name="item_id" value="{{ edit_item.id if edit_item else '' }}">
+          <div class="mb-3">
+            <label class="form-label" for="viz_name">Nome da visualização</label>
+            <input type="text" class="form-control" name="viz_name" id="viz_name" placeholder="ex.: Voos por dia" value="{{ edit_item.name if edit_item else '' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="view_name">View base</label>
+            <select class="form-select" name="view_name" id="view_name" onchange="this.form.submit()" required>
+              <option value="">Selecione...</option>
+              {% for view in views %}
+              <option value="{{ view.name }}" {% if selected_view == view.name or (edit_item and edit_item.view_name == view.name and not selected_view) %}selected{% endif %}>{{ view.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% if view_columns %}
+          <div class="mb-3">
+            <label class="form-label">Colunas disponíveis</label>
+            <div class="small text-muted">{{ view_columns|join(', ') }}</div>
+          </div>
+          {% endif %}
+          <div class="mb-3">
+            <label class="form-label" for="viz_type">Tipo</label>
+            <select class="form-select" name="viz_type" id="viz_type">
+              {% set current_type = edit_item.viz_type if edit_item else request.form.get('viz_type', 'table') %}
+              <option value="table" {% if current_type == 'table' %}selected{% endif %}>Tabela</option>
+              <option value="line" {% if current_type == 'line' %}selected{% endif %}>Linha</option>
+              <option value="bar" {% if current_type == 'bar' %}selected{% endif %}>Barra</option>
+              <option value="pie" {% if current_type == 'pie' %}selected{% endif %}>Pizza</option>
+              <option value="scatter" {% if current_type == 'scatter' %}selected{% endif %}>Dispersão</option>
+            </select>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="x_column">Coluna X</label>
+              <input type="text" class="form-control" name="x_column" id="x_column" value="{{ edit_item.columns.x if edit_item and edit_item.columns.x else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="y_column">Coluna Y</label>
+              <input type="text" class="form-control" name="y_column" id="y_column" value="{{ edit_item.columns.y if edit_item and edit_item.columns.y else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="color_column">Cor/Agrupamento</label>
+              <input type="text" class="form-control" name="color_column" id="color_column" value="{{ edit_item.columns.color if edit_item and edit_item.columns.color else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="size_column">Tamanho (dispersão)</label>
+              <input type="text" class="form-control" name="size_column" id="size_column" value="{{ edit_item.columns.size if edit_item and edit_item.columns.size else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="text_column">Texto/hover</label>
+              <input type="text" class="form-control" name="text_column" id="text_column" value="{{ edit_item.columns.text if edit_item and edit_item.columns.text else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="names_column">Rótulos (pizza)</label>
+              <input type="text" class="form-control" name="names_column" id="names_column" value="{{ edit_item.columns.names if edit_item and edit_item.columns.names else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="value_column">Valores (pizza)</label>
+              <input type="text" class="form-control" name="value_column" id="value_column" value="{{ edit_item.columns.values if edit_item and edit_item.columns.values else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="table_columns">Colunas da tabela (separadas por vírgula)</label>
+              <input type="text" class="form-control" name="table_columns" id="table_columns" value="{{ edit_item.columns.table_columns if edit_item and edit_item.columns.table_columns else '' }}">
+            </div>
+          </div>
+          <div class="mb-3 mt-3">
+            <label class="form-label" for="filters">Filtros (um por linha)</label>
+            <textarea class="form-control" name="filters" id="filters" rows="3" placeholder="coluna operador valor&#10;status = 'Scheduled'&#10;passageiros >= 150">{{ edit_item.filters_text if edit_item else '' }}</textarea>
+            <div class="form-text">Operadores aceitos: =, !=, &gt;, &lt;, &gt;=, &lt;=, contains.</div>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" type="submit" name="action" value="preview">Pré-visualizar</button>
+            <button class="btn btn-primary" type="submit" name="action" value="{% if edit_item %}update{% else %}add{% endif %}">
+              {% if edit_item %}Salvar alterações{% else %}Adicionar ao dashboard{% endif %}
+            </button>
+            {% if edit_item %}
+            <a class="btn btn-outline-danger" href="{{ url_for('dashboard') }}">Cancelar edição</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    {% if preview %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">Pré-visualização</div>
+      <div class="card-body">
+        {% if preview.type == 'table' %}
+        <div class="table-responsive">
+          {{ preview.table_html | safe }}
+        </div>
+        {% else %}
+        <div id="preview-chart" style="height:360px;"></div>
+        <script>
+          Plotly.react('preview-chart', {{ preview.graph_json|safe }}, {});
+        </script>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    <div class="card shadow-sm">
+      <div class="card-header">Dashboard</div>
+      <div class="card-body">
+        {% if dashboard_items %}
+        {% for item in dashboard_items %}
+        <div class="mb-4">
+          <div class="d-flex justify-content-between align-items-center">
+            <h2 class="h5 mb-0">{{ item.name }}</h2>
+            <div class="btn-group btn-group-sm">
+              <a class="btn btn-outline-primary" href="{{ url_for('edit_dashboard_item', item_id=item.id) }}">Editar</a>
+              <form method="post" action="{{ url_for('delete_dashboard_item', item_id=item.id) }}" class="d-inline" onsubmit="return confirm('Remover visualização {{ item.name }}?');">
+                <button class="btn btn-outline-danger" type="submit">Remover</button>
+              </form>
+            </div>
+          </div>
+          <div class="small text-muted mb-2">Fonte: {{ item.view_name }} | Tipo: {{ item.viz_type }}</div>
+          {% if item.rendered.type == 'table' %}
+          <div class="table-responsive">
+            {{ item.rendered.table_html | safe }}
+          </div>
+          {% else %}
+          <div id="chart-{{ item.id }}" style="height:360px;"></div>
+          <script>
+            Plotly.react('chart-{{ item.id }}', {{ item.rendered.graph_json|safe }}, {});
+          </script>
+          {% endif %}
+          {% if item.filters_text %}
+          <div class="mt-2">
+            <span class="badge bg-light text-dark">Filtros:</span>
+            <code>{{ item.filters_text.replace('\n', '; ') }}</code>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="text-muted">Nenhuma visualização criada. Use o formulário ao lado para adicionar elementos ao dashboard.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

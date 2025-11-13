@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Views SQL{% endblock %}
+{% block content %}
+<h1 class="mb-4">Gerenciamento de Views</h1>
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header">{% if edit_view %}Editar view {{ edit_view.name }}{% else %}Criar nova view{% endif %}</div>
+      <div class="card-body">
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+        <form method="post">
+          {% if edit_view %}
+          <input type="hidden" name="original_name" value="{{ edit_view.name }}">
+          {% endif %}
+          <div class="mb-3">
+            <label for="view_name" class="form-label">Nome da view</label>
+            <input type="text" class="form-control" name="view_name" id="view_name" placeholder="ex.: voos_latam" value="{{ edit_view.name if edit_view else '' }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Fonte</label>
+            <select class="form-select" name="query_source" id="query_source" onchange="toggleSource(this.value)">
+              <option value="table" {% if not edit_view or edit_view.query.upper().startswith('SELECT * FROM') %}selected{% endif %}>Tabela existente</option>
+              <option value="query" {% if edit_view and not edit_view.query.upper().startswith('SELECT * FROM') %}selected{% endif %}>Consulta SQL</option>
+            </select>
+          </div>
+          <div class="mb-3" id="table_selector">
+            <label for="table_name" class="form-label">Tabela</label>
+            <select name="table_name" id="table_name" class="form-select">
+              <option value="">Selecione...</option>
+              {% for table in tables %}
+              <option value="{{ table }}" {% if edit_view and edit_view.query.strip() == ('SELECT * FROM ' ~ table) %}selected{% endif %}>{{ table }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3" id="sql_box">
+            <label for="sql_query" class="form-label">Consulta SQL (SELECT/WITH)</label>
+            <textarea name="sql_query" id="sql_query" rows="6" class="form-control" placeholder="SELECT * FROM flights LIMIT 100">{{ edit_view.query if edit_view else '' }}</textarea>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">{% if edit_view %}Atualizar{% else %}Criar view{% endif %}</button>
+            {% if edit_view %}
+            <a href="{{ url_for('manage_views') }}" class="btn btn-outline-secondary">Cancelar</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header">Views em memória</div>
+      <div class="card-body">
+        {% if views %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Última atualização</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for view in views %}
+              <tr>
+                <td><code>{{ view.name }}</code></td>
+                <td>{{ view.updated_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+                <td class="text-end">
+                  <div class="btn-group btn-group-sm" role="group">
+                    <a href="{{ url_for('edit_view', view_name=view.name) }}" class="btn btn-outline-primary">Editar</a>
+                    <form method="post" action="{{ url_for('refresh_view', view_name=view.name) }}" class="d-inline">
+                      <button class="btn btn-outline-secondary" type="submit">Atualizar</button>
+                    </form>
+                    <form method="post" action="{{ url_for('delete_view', view_name=view.name) }}" class="d-inline" onsubmit="return confirm('Remover view {{ view.name }}?');">
+                      <button class="btn btn-outline-danger" type="submit">Excluir</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted">Nenhuma view criada até o momento.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  function toggleSource(value) {
+    const tableSelector = document.getElementById('table_selector');
+    const sqlBox = document.getElementById('sql_box');
+    if (value === 'table') {
+      tableSelector.style.display = 'block';
+      sqlBox.style.display = 'none';
+    } else {
+      tableSelector.style.display = 'none';
+      sqlBox.style.display = 'block';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    toggleSource(document.getElementById('query_source').value);
+  });
+</script>
+{% endblock %}

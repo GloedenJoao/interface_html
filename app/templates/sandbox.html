@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Sandbox SQL{% endblock %}
+{% block content %}
+<h1 class="mb-4">Sandbox SQL</h1>
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header">Executar consulta</div>
+      <div class="card-body">
+        {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label" for="sql_query">Consulta SQL</label>
+            <textarea name="sql_query" id="sql_query" rows="6" class="form-control" placeholder="SELECT * FROM minha_view LIMIT 20">{{ sql_query }}</textarea>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="new_view_name">Salvar como view (opcional)</label>
+              <input type="text" class="form-control" name="new_view_name" id="new_view_name" placeholder="ex.: nova_view">
+            </div>
+            <div class="col-md-6 d-flex align-items-end gap-2">
+              <button class="btn btn-outline-secondary" type="submit" name="action" value="run">Executar</button>
+              <button class="btn btn-primary" type="submit" name="action" value="save">Executar e salvar</button>
+            </div>
+          </div>
+        </form>
+        {% if result_html %}
+        <div class="table-responsive mt-4">
+          {{ result_html | safe }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-header">Views disponíveis</div>
+      <div class="card-body">
+        {% if view_summaries %}
+        <div class="accordion" id="viewsAccordion">
+          {% for view_name, columns in view_summaries %}
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="heading-{{ loop.index }}">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ loop.index }}" aria-expanded="false" aria-controls="collapse-{{ loop.index }}">
+                {{ view_name }}
+              </button>
+            </h2>
+            <div id="collapse-{{ loop.index }}" class="accordion-collapse collapse" aria-labelledby="heading-{{ loop.index }}" data-bs-parent="#viewsAccordion">
+              <div class="accordion-body">
+                <ul class="list-unstyled mb-0">
+                  {% for column, dtype in columns %}
+                  <li><code>{{ column }}</code> <span class="text-muted">({{ dtype }})</span></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">Nenhuma view disponível. Crie views na página principal antes de usar a sandbox.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
