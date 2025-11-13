@@ -176,67 +176,164 @@ def register_routes(app: Flask) -> None:
         if not selected_view_name and edit_item is not None:
             selected_view_name = edit_item.view_name
 
+        columns_state: Dict[str, Optional[str]] = {
+            "x": None,
+            "y": None,
+            "color": None,
+            "size": None,
+            "text": None,
+            "names": None,
+            "values": None,
+            "table_columns": None,
+        }
+        if edit_item is not None:
+            for key in columns_state:
+                columns_state[key] = edit_item.columns.get(key)
+
+        viz_type_value = edit_item.viz_type if edit_item is not None else "table"
+        viz_name_value = edit_item.name if edit_item is not None else ""
+        filters_value = edit_item.filters_text if edit_item is not None else ""
+
         if request.method == "POST":
             action = request.form.get("action")
-            selected_view_name = request.form.get("view_name") or None
-            viz_type = request.form.get("viz_type") or "table"
-            viz_name = (request.form.get("viz_name") or viz_type.title()).strip()
-            filters_text = request.form.get("filters") or ""
-            columns = {
-                "x": _clean(request.form.get("x_column")),
-                "y": _clean(request.form.get("y_column")),
-                "color": _clean(request.form.get("color_column")),
-                "size": _clean(request.form.get("size_column")),
-                "text": _clean(request.form.get("text_column")),
-                "names": _clean(request.form.get("names_column")),
-                "values": _clean(request.form.get("value_column")),
-                "table_columns": _clean(request.form.get("table_columns")),
-            }
+            if action != "filter_saved":
+                selected_view_name = request.form.get("view_name") or None
+                viz_type_value = request.form.get("viz_type") or viz_type_value or "table"
+                raw_viz_name = request.form.get("viz_name")
+                if raw_viz_name is not None:
+                    viz_name_value = raw_viz_name.strip() or viz_type_value.title()
+                elif not viz_name_value:
+                    viz_name_value = viz_type_value.title()
+                if request.form.get("filters") is not None:
+                    filters_value = request.form.get("filters") or ""
+
+                columns_state.update(
+                    {
+                        "x": _clean(request.form.get("x_column")),
+                        "y": _clean(request.form.get("y_column")),
+                        "color": _clean(request.form.get("color_column")),
+                        "size": _clean(request.form.get("size_column")),
+                        "text": _clean(request.form.get("text_column")),
+                        "names": _clean(request.form.get("names_column")),
+                        "values": _clean(request.form.get("value_column")),
+                    }
+                )
+                table_columns_selected = [
+                    value.strip()
+                    for value in request.form.getlist("table_columns")
+                    if value and value.strip()
+                ]
+                if table_columns_selected:
+                    columns_state["table_columns"] = ", ".join(table_columns_selected)
+                else:
+                    columns_state["table_columns"] = _clean(
+                        request.form.get("table_columns")
+                    )
+
             item_id = request.form.get("item_id") or None
 
             if action in {"preview", "add", "update"}:
                 if not selected_view_name:
                     error = "Escolha uma view para construir a visualização."
                 else:
-                    result = build_visualization(selected_view_name, viz_type, columns, filters_text)
+                    result = build_visualization(
+                        selected_view_name,
+                        viz_type_value,
+                        columns_state,
+                        filters_value,
+                    )
                     if "error" in result:
                         error = result["error"]
                     else:
                         preview = result
                         if action == "add":
                             dashboard_store.add(
-                                viz_name,
+                                viz_name_value,
                                 selected_view_name,
-                                viz_type,
-                                columns,
-                                filters_text,
+                                viz_type_value,
+                                columns_state.copy(),
+                                filters_value,
                                 result,
                             )
-                            success = f"Visualização '{viz_name}' adicionada ao dashboard."
+                            success = f"Visualização '{viz_name_value}' adicionada ao dashboard."
                         elif action == "update" and item_id:
                             dashboard_store.update(
                                 item_id,
-                                viz_name,
+                                viz_name_value,
                                 selected_view_name,
-                                viz_type,
-                                columns,
-                                filters_text,
+                                viz_type_value,
+                                columns_state.copy(),
+                                filters_value,
                                 result,
                             )
-                            success = f"Visualização '{viz_name}' atualizada."
+                            success = f"Visualização '{viz_name_value}' atualizada."
+            elif action == "filter_saved":
+                item = dashboard_store.get(item_id) if item_id else None
+                if item is None:
+                    error = "Visualização não encontrada para aplicar filtros."
+                else:
+                    filter_columns = request.form.getlist("filter_column")
+                    filter_operators = request.form.getlist("filter_operator")
+                    filter_values = request.form.getlist("filter_value")
+                    filter_lines = []
+                    for column, operator, value in zip(
+                        filter_columns, filter_operators, filter_values
+                    ):
+                        column = _clean(column)
+                        operator = (operator or "").strip()
+                        value = (value or "").strip()
+                        if column and operator and value:
+                            filter_lines.append(f"{column} {operator} {value}")
+
+                    filters_text = "\n".join(filter_lines)
+                    result = build_visualization(
+                        item.view_name, item.viz_type, item.columns, filters_text
+                    )
+                    if "error" in result:
+                        error = result["error"]
+                    else:
+                        dashboard_store.update(
+                            item.id,
+                            item.name,
+                            item.view_name,
+                            item.viz_type,
+                            item.columns,
+                            filters_text,
+                            result,
+                        )
+                        success = f"Filtros atualizados para '{item.name}'."
 
         view_columns = _get_view_columns(selected_view_name)
+        selected_table_columns = (
+            [
+                value.strip()
+                for value in (columns_state.get("table_columns") or "").split(",")
+                if value.strip()
+            ]
+            if columns_state.get("table_columns")
+            else []
+        )
+        dashboard_items = dashboard_store.list()
+        dashboard_columns = {
+            item.id: _get_view_columns(item.view_name) for item in dashboard_items
+        }
 
         return render_template(
             "dashboard.html",
             views=list(view_store.list()),
-            dashboard_items=dashboard_store.list(),
+            dashboard_items=dashboard_items,
             selected_view=selected_view_name,
             view_columns=view_columns,
             preview=preview,
             error=error,
             success=success,
             edit_item=edit_item,
+            viz_type_value=viz_type_value,
+            viz_name_value=viz_name_value,
+            filters_value=filters_value,
+            columns_state=columns_state,
+            selected_table_columns=selected_table_columns,
+            dashboard_columns=dashboard_columns,
         )
 
     @app.route("/dashboard/<item_id>/delete", methods=["POST"])

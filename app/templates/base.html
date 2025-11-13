@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4 shadow">
       <div class="container-fluid">
         <a class="navbar-brand" href="{{ url_for('manage_views') }}">Flight SQL Lab</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,7 +38,7 @@
         </div>
       </div>
     </nav>
-    <main class="container mb-5">
+    <main class="container mb-5 pb-5">
       {% block content %}{% endblock %}
     </main>
     <script
