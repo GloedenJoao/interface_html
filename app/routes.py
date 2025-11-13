@@ -435,24 +435,69 @@ def build_visualization(view_name: str, viz_type: str, columns: Dict[str, Option
 
     if viz_type == "line":
         x, y = columns.get("x"), columns.get("y")
-        if not x or not y:
-            return {"error": "Informe as colunas X e Y para o gráfico de linha."}
-        fig = px.line(
-            dataframe,
-            x=x,
-            y=y,
-            color=columns.get("color") or None,
-        )
+        color = columns.get("color") or None
+        if not x:
+            return {"error": "Informe a coluna do eixo para o gráfico de linha."}
+        if x not in dataframe.columns:
+            return {"error": f"Coluna '{x}' não encontrada na view."}
+        if color and color not in dataframe.columns:
+            return {"error": f"Coluna '{color}' não encontrada na view."}
+        if y:
+            if y not in dataframe.columns:
+                return {"error": f"Coluna '{y}' não encontrada na view."}
+            fig = px.line(
+                dataframe,
+                x=x,
+                y=y,
+                color=color,
+            )
+        else:
+            group_cols = [x]
+            if color and color in dataframe.columns and color not in group_cols:
+                group_cols.append(color)
+            grouped = (
+                dataframe.groupby(group_cols).size().reset_index(name="Registros")
+            )
+            sort_cols = group_cols.copy()
+            grouped = grouped.sort_values(sort_cols)
+            fig = px.line(
+                grouped,
+                x=x,
+                y="Registros",
+                color=color if color in grouped.columns else None,
+            )
     elif viz_type == "bar":
         x, y = columns.get("x"), columns.get("y")
-        if not x or not y:
-            return {"error": "Informe as colunas X e Y para o gráfico de barras."}
-        fig = px.bar(
-            dataframe,
-            x=x,
-            y=y,
-            color=columns.get("color") or None,
-        )
+        color = columns.get("color") or None
+        if not x:
+            return {"error": "Informe a coluna do eixo para o gráfico de barras."}
+        if x not in dataframe.columns:
+            return {"error": f"Coluna '{x}' não encontrada na view."}
+        if color and color not in dataframe.columns:
+            return {"error": f"Coluna '{color}' não encontrada na view."}
+        if y:
+            if y not in dataframe.columns:
+                return {"error": f"Coluna '{y}' não encontrada na view."}
+            fig = px.bar(
+                dataframe,
+                x=x,
+                y=y,
+                color=color,
+            )
+        else:
+            group_cols = [x]
+            if color and color in dataframe.columns and color not in group_cols:
+                group_cols.append(color)
+            grouped = (
+                dataframe.groupby(group_cols).size().reset_index(name="Registros")
+            )
+            grouped = grouped.sort_values(group_cols)
+            fig = px.bar(
+                grouped,
+                x=x,
+                y="Registros",
+                color=color if color in grouped.columns else None,
+            )
     elif viz_type == "scatter":
         x, y = columns.get("x"), columns.get("y")
         if not x or not y:

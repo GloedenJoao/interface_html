@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-{% macro column_field(field_name, label, selected, viz_types, col_class="col-md-6", disabled=False) -%}
+{% macro column_field(field_name, label, selected, viz_types, col_class="col-md-6", disabled=False, help_text=None) -%}
   <div class="{{ col_class }}" data-role="viz-field" data-viz="{{ viz_types }}">
     <label class="form-label" for="{{ field_name }}">{{ label }}</label>
     <select class="form-select" name="{{ field_name }}" id="{{ field_name }}" {% if disabled %}disabled{% endif %}>
@@ -10,6 +10,9 @@
       <option value="{{ column }}" {% if selected == column %}selected{% endif %}>{{ column }}</option>
       {% endfor %}
     </select>
+    {% if help_text %}
+    <div class="form-text">{{ help_text }}</div>
+    {% endif %}
   </div>
 {%- endmacro %}
 
@@ -71,21 +74,42 @@
             </select>
           </div>
           <div class="row g-3" id="viz-fields">
-            {{ column_field('x_column', 'Coluna X', columns_state['x'], 'line,bar,scatter', disabled=not view_columns) }}
-            {{ column_field('y_column', 'Coluna Y', columns_state['y'], 'line,bar,scatter', disabled=not view_columns) }}
-            {{ column_field('color_column', 'Cor / Agrupamento', columns_state['color'], 'line,bar,scatter', disabled=not view_columns) }}
-            {{ column_field('size_column', 'Tamanho (dispersão)', columns_state['size'], 'scatter', disabled=not view_columns) }}
-            {{ column_field('text_column', 'Texto / Hover', columns_state['text'], 'scatter', disabled=not view_columns) }}
+            {{ column_field('x_column', 'Eixo / Categoria (X)', columns_state['x'], 'line,bar,scatter', disabled=not view_columns, help_text='Obrigatório para gráficos de linha, barra e dispersão. Escolha a coluna que representa o eixo horizontal.') }}
+            {{ column_field('y_column', 'Métrica / Valor (Y)', columns_state['y'], 'line,bar,scatter', disabled=not view_columns, help_text='Opcional para linha e barra (usamos a contagem de registros quando vazio). Obrigatório para dispersão.') }}
+            {{ column_field('color_column', 'Cor / Agrupamento', columns_state['color'], 'line,bar,scatter', disabled=not view_columns, help_text='Agrupe as séries do gráfico. Opcional.') }}
+            <div class="col-12" data-role="viz-field" data-viz="scatter">
+              <div class="p-3 mb-2 border rounded-4 bg-body-secondary bg-opacity-50">
+                <h3 class="h6 mb-2">Como montar o gráfico de dispersão</h3>
+                <p class="mb-2 small">
+                  Combine duas métricas numéricas para comparar correlações. Informe os eixos X e Y e, opcionalmente, utilize cor para segmentar grupos,
+                  tamanho para destacar magnitude e texto para mostrar detalhes no hover.
+                </p>
+                <ul class="small ps-3 mb-0">
+                  <li>Eixo X e Y: métricas numéricas obrigatórias.</li>
+                  <li>Cor / Agrupamento: destaque categorias diferentes.</li>
+                  <li>Tamanho: altera o raio dos pontos.</li>
+                  <li>Texto / Hover: aparece ao passar o mouse.</li>
+                </ul>
+              </div>
+            </div>
+            {{ column_field('size_column', 'Tamanho (dispersão)', columns_state['size'], 'scatter', disabled=not view_columns, help_text='Opcional. Define o tamanho dos marcadores no gráfico de dispersão.') }}
+            {{ column_field('text_column', 'Texto / Hover', columns_state['text'], 'scatter', disabled=not view_columns, help_text='Opcional. Mostrado ao passar o mouse sobre cada ponto.') }}
             {{ column_field('names_column', 'Rótulos (pizza)', columns_state['names'], 'pie', disabled=not view_columns) }}
             {{ column_field('value_column', 'Valores (pizza)', columns_state['values'], 'pie', disabled=not view_columns) }}
             <div class="col-12" data-role="viz-field" data-viz="table">
-              <label class="form-label" for="table_columns">Colunas da tabela</label>
-              <select class="form-select" id="table_columns" name="table_columns" multiple {% if not view_columns %}disabled{% endif %}>
+              <label class="form-label">Colunas da tabela</label>
+              {% if view_columns %}
+              <div class="d-flex flex-wrap gap-2" id="table_columns" role="group" aria-label="Colunas da tabela">
                 {% for column in view_columns %}
-                <option value="{{ column }}" {% if column in selected_table_columns %}selected{% endif %}>{{ column }}</option>
+                {% set element_id = 'table-column-' ~ loop.index %}
+                <input type="checkbox" class="btn-check" id="{{ element_id }}" name="table_columns" value="{{ column }}" {% if column in selected_table_columns %}checked{% endif %}>
+                <label class="btn btn-outline-primary btn-sm" for="{{ element_id }}">{{ column }}</label>
                 {% endfor %}
-              </select>
-              <div class="form-text">Selecione as colunas que deseja exibir na visualização em tabela.</div>
+              </div>
+              {% else %}
+              <div class="form-control" style="pointer-events: none; opacity: .6;">Selecione uma view para listar as colunas disponíveis.</div>
+              {% endif %}
+              <div class="form-text">Clique para selecionar ou remover as colunas exibidas na tabela.</div>
             </div>
           </div>
           <div class="mb-3 mt-3">
