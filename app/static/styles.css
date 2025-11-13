@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg-body: #0b1322;
   --bg-card: #121d31;
   --bg-card-header: rgba(22, 36, 58, 0.9);
@@ -11,10 +12,27 @@
   --bg-table: rgba(18, 30, 50, 0.92);
   --bg-table-alt: rgba(24, 38, 62, 0.92);
   --bg-table-hover: rgba(47, 71, 110, 0.5);
+  --bs-body-bg: #0b1322;
+  --bs-body-color: #eef5ff;
+  --bs-border-color: #23324b;
+  --bs-heading-color: #eef5ff;
+  --bs-link-color: #1f6feb;
+  --bs-link-hover-color: #539bff;
+  --bs-table-color: #eef5ff;
+  --bs-table-striped-color: #eef5ff;
+  --bs-table-hover-color: #eef5ff;
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: rgba(24, 38, 62, 0.92);
+  --bs-table-hover-bg: rgba(47, 71, 110, 0.5);
+  --bs-form-control-bg: rgba(10, 19, 33, 0.92);
+  --bs-form-control-color: #eef5ff;
+  --bs-form-control-disabled-bg: rgba(10, 19, 33, 0.6);
+  --bs-form-control-placeholder-color: rgba(166, 181, 214, 0.6);
 }
 
 body {
   background: radial-gradient(circle at top, rgba(18, 34, 59, 0.6), var(--bg-body));
+  background-color: var(--bg-body);
   color: var(--text-primary);
   font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   min-height: 100vh;
@@ -94,11 +112,20 @@ a:focus {
 .form-control,
 .form-select,
 textarea {
-  background-color: rgba(10, 19, 33, 0.85);
-  border: 1px solid rgba(63, 93, 138, 0.35);
-  color: var(--text-primary);
+  background-color: rgba(10, 19, 33, 0.92) !important;
+  border: 1px solid rgba(63, 93, 138, 0.45) !important;
+  color: var(--text-primary) !important;
   border-radius: 0.75rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-control:disabled,
+.form-select:disabled,
+textarea:disabled,
+.form-control[readonly],
+textarea[readonly] {
+  background-color: rgba(10, 19, 33, 0.6) !important;
+  color: rgba(166, 181, 214, 0.7) !important;
 }
 
 .form-control:focus,
@@ -111,7 +138,20 @@ textarea:focus {
 
 .form-control::placeholder,
 textarea::placeholder {
-  color: rgba(166, 181, 214, 0.5);
+  color: rgba(166, 181, 214, 0.55);
+}
+
+.form-select option,
+select option {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 textarea {
@@ -202,6 +242,12 @@ textarea {
   overflow: hidden;
 }
 
+.table > :not(caption) > * > * {
+  background-color: transparent !important;
+  color: var(--text-primary);
+  border-color: rgba(51, 74, 111, 0.35);
+}
+
 .table thead th {
   background: linear-gradient(135deg, rgba(28, 46, 76, 0.95), rgba(20, 34, 57, 0.95));
   border-bottom: none;
@@ -219,6 +265,11 @@ textarea {
 .table tbody td,
 .table thead th {
   border-color: rgba(51, 74, 111, 0.35) !important;
+}
+
+.table tbody td,
+.table tbody th {
+  color: var(--text-primary);
 }
 
 .table tbody td {
@@ -256,6 +307,7 @@ table.dataframe th,
 table.dataframe td {
   border: 1px solid rgba(51, 74, 111, 0.35);
   padding: 0.65rem 0.75rem;
+  color: var(--text-primary);
 }
 
 table.dataframe thead th {
