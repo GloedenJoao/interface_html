@@ -1,0 +1,18 @@
+body {
+  background-color: #f5f6fa;
+}
+
+.table-responsive {
+  max-height: 420px;
+}
+
+.columns-box {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+code {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+}
