@@ -1,13 +1,16 @@
 :root {
-  --bg-body: #070d18;
-  --bg-card: #101a2b;
-  --bg-card-header: rgba(24, 40, 66, 0.85);
+  --bg-body: #0b1322;
+  --bg-card: #121d31;
+  --bg-card-header: rgba(22, 36, 58, 0.9);
   --text-primary: #eef5ff;
   --text-secondary: #a6b5d6;
   --accent-blue: #1f6feb;
   --accent-gold: #f5c451;
-  --border-color: #1f2d44;
-  --muted-bg: rgba(13, 21, 35, 0.8);
+  --border-color: #23324b;
+  --muted-bg: rgba(16, 26, 44, 0.85);
+  --bg-table: rgba(18, 30, 50, 0.92);
+  --bg-table-alt: rgba(24, 38, 62, 0.92);
+  --bg-table-hover: rgba(47, 71, 110, 0.5);
 }
 
 body {
@@ -191,12 +194,16 @@ textarea {
 }
 
 .table {
+  background: var(--bg-table);
+  border-collapse: separate;
+  border-spacing: 0;
   color: var(--text-primary);
   margin-bottom: 0;
+  overflow: hidden;
 }
 
 .table thead th {
-  background: rgba(18, 33, 54, 0.9);
+  background: linear-gradient(135deg, rgba(28, 46, 76, 0.95), rgba(20, 34, 57, 0.95));
   border-bottom: none;
   color: var(--accent-gold);
   font-weight: 600;
@@ -206,7 +213,12 @@ textarea {
 }
 
 .table tbody tr {
-  border-color: rgba(31, 45, 68, 0.4);
+  border-color: rgba(51, 74, 111, 0.45);
+}
+
+.table tbody td,
+.table thead th {
+  border-color: rgba(51, 74, 111, 0.35) !important;
 }
 
 .table tbody td {
@@ -214,11 +226,56 @@ textarea {
 }
 
 .table-striped > tbody > tr:nth-of-type(odd) {
-  --bs-table-accent-bg: rgba(22, 36, 57, 0.9);
+  --bs-table-accent-bg: var(--bg-table);
 }
 
 .table-striped > tbody > tr:nth-of-type(even) {
-  --bs-table-accent-bg: rgba(15, 25, 40, 0.9);
+  --bs-table-accent-bg: var(--bg-table-alt);
+}
+
+.table-hover > tbody > tr:hover {
+  --bs-table-accent-bg: var(--bg-table-hover);
+  color: var(--text-primary);
+}
+
+.table tbody tr:hover td,
+.table tbody tr:hover th {
+  background: var(--bg-table-hover) !important;
+}
+
+table.dataframe {
+  background: var(--bg-table);
+  border: 1px solid rgba(51, 74, 111, 0.45);
+  border-radius: 0.85rem;
+  color: var(--text-primary);
+  margin-bottom: 0;
+  overflow: hidden;
+}
+
+table.dataframe th,
+table.dataframe td {
+  border: 1px solid rgba(51, 74, 111, 0.35);
+  padding: 0.65rem 0.75rem;
+}
+
+table.dataframe thead th {
+  background: linear-gradient(135deg, rgba(28, 46, 76, 0.95), rgba(20, 34, 57, 0.95));
+  color: var(--accent-gold);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+table.dataframe tbody tr:nth-child(even) {
+  background: var(--bg-table-alt);
+}
+
+table.dataframe tbody tr:nth-child(odd) {
+  background: var(--bg-table);
+}
+
+table.dataframe tbody tr:hover {
+  background: var(--bg-table-hover);
 }
 
 .columns-box {
